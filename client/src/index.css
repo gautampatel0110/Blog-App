@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: "Inter", system-ui, sans-serif;
+  }
+}
+
+/* shared ui */
+.input {
+  @apply w-full rounded-md border border-gray-300 px-4 py-2.5
+  text-sm text-gray-900 placeholder-gray-400
+  focus:outline-none focus:ring-2 focus:ring-[#5B4CF5]
+  focus:border-[#5B4CF5];
+}
+
+.label {
+  @apply text-sm font-medium text-gray-700;
+}
+
+.btn-primary {
+  @apply inline-flex items-center justify-center
+  rounded-md bg-[#5B4CF5]
+  px-4 py-2
+  text-sm font-medium text-white
+  hover:bg-[#4a3de0]
+  transition;
+}
+
+
+.editor .ql-container {
+  min-height: 250px;   /* main body height */
+}
+
+.editor .ql-editor {
+  min-height: 300px;   /* cursor writing area */
+  font-size: 15px;
+  line-height: 1.6;
+}

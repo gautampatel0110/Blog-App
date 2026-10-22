@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output and caches
+dist/
+**/dist/
+dist-ssr/
+client/.vite/
+coverage/
+*.tsbuildinfo
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs and operating system files
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Editors
+.idea/
+.vscode/

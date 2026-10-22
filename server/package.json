@@ -1,0 +1,38 @@
+{
+  "name": "blog-server",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^1.41.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.6",
+    "dotenv": "^17.2.4",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.10.0",
+    "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0",
+    "node-cron": "^4.2.1",
+    "nodemailer": "^6.10.1",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.5",
+    "@types/nodemailer": "^8.0.2",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3"
+  }
+}
