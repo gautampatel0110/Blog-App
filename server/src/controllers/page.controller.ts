@@ -1,4 +1,4 @@
-import { isValidObjectId, Types, type FilterQuery } from "mongoose";
+import { Error as MongooseError, isValidObjectId, Types, type FilterQuery } from "mongoose";
 import type { RequestHandler } from "express";
 import cloudinary from "../config/cloudinary";
 import Page, { PAGE_STATUSES, type PageAttachment, type PageRecord } from "../models/Page";
@@ -6,6 +6,27 @@ import User from "../models/User";
 
 function uploadedFiles(req: Parameters<RequestHandler>[0]): Express.Multer.File[] {
   return Array.isArray(req.files) ? req.files : [];
+}
+
+/** Turns "My First Post!" into "my-first-post" so URLs stay clean and predictable. */
+function normalizeSlug(value: unknown): string {
+  return typeof value === "string"
+    ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+    : "";
+}
+
+/** Maps database errors to friendly 4xx responses; returns false when the error is unexpected. */
+function sendKnownError(error: unknown, res: Parameters<RequestHandler>[1]): boolean {
+  if (typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+    res.status(409).json({ message: "That URL is already used by another page. Please choose a different one." });
+    return true;
+  }
+  if (error instanceof MongooseError.ValidationError) {
+    const first = Object.values(error.errors)[0];
+    res.status(400).json({ message: first?.message ?? "Please check the page details" });
+    return true;
+  }
+  return false;
 }
 
 function isPageStatus(value: unknown): value is PageRecord["status"] {
@@ -47,6 +68,12 @@ export const createPage: RequestHandler = async (req, res) => {
       res.status(401).json({ message: "Not authenticated" });
       return;
     }
+    const slug = normalizeSlug(req.body.slug);
+    if (typeof req.body.title !== "string" || !req.body.title.trim() || !slug || typeof req.body.body !== "string" || !req.body.body.trim()) {
+      res.status(400).json({ message: "Title, URL and Body are required" });
+      return;
+    }
+    const status = isPageStatus(req.body.status) ? req.body.status : "Draft";
     const files = uploadedFiles(req);
     const attachments: PageAttachment[] = files.map((file) => ({
       url: file.path,
@@ -57,17 +84,19 @@ export const createPage: RequestHandler = async (req, res) => {
     const page = await Page.create({
       title: req.body.title,
       subTitle: req.body.subTitle,
-      slug: req.body.slug,
+      slug,
       body: req.body.body,
       author: typeof req.body.author === "string" ? req.body.author.trim() : "",
       showAuthor: req.body.showAuthor !== "false" && req.body.showAuthor !== false,
-      status: isPageStatus(req.body.status) ? req.body.status : "Draft",
-      publishedAt: req.body.publishedAt ? new Date(req.body.publishedAt) : null,
+      // Scheduling goes through PUT /:id/schedule, so a new page is either a draft or published now.
+      status: status === "Published" ? "Published" : "Draft",
+      publishedAt: status === "Published" ? new Date() : null,
       attachments,
       createdBy: req.user.id,
     });
     res.status(201).json(page);
   } catch (error) {
+    if (sendKnownError(error, res)) return;
     console.error("CREATE PAGE ERROR:", error);
     res.status(500).json({ message: "Create page failed" });
   }
@@ -112,7 +141,14 @@ export const updatePage: RequestHandler = async (req, res) => {
 
     page.title = req.body.title ?? page.title;
     page.subTitle = req.body.subTitle ?? page.subTitle;
-    page.slug = req.body.slug ?? page.slug;
+    if (req.body.slug !== undefined) {
+      const slug = normalizeSlug(req.body.slug);
+      if (!slug) {
+        res.status(400).json({ message: "URL is required" });
+        return;
+      }
+      page.slug = slug;
+    }
     page.body = req.body.body ?? page.body;
     page.author = typeof req.body.author === "string" ? req.body.author.trim() : page.author;
     if (req.body.showAuthor !== undefined) {
@@ -131,6 +167,7 @@ export const updatePage: RequestHandler = async (req, res) => {
     res.json(updatedPage);
     await removeCloudinaryAssets(removedIds);
   } catch (error) {
+    if (sendKnownError(error, res)) return;
     console.error("UPDATE PAGE ERROR:", error);
     res.status(500).json({ message: "Update failed" });
   }
@@ -178,6 +215,29 @@ export const getPages: RequestHandler = async (req, res) => {
   } catch (error) {
     console.error("GET PAGES ERROR:", error);
     res.status(500).json({ message: "Failed to fetch pages" });
+  }
+};
+
+export const getPageStats: RequestHandler = async (_req, res) => {
+  try {
+    const [counts, authorIds] = await Promise.all([
+      Page.aggregate<{ _id: PageRecord["status"]; count: number }>([
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      Page.distinct("createdBy"),
+    ]);
+    const byStatus = Object.fromEntries(counts.map(({ _id, count }) => [_id, count]));
+    const authors = await User.find({ _id: { $in: authorIds } }).distinct("name");
+    res.json({
+      total: counts.reduce((sum, { count }) => sum + count, 0),
+      published: byStatus["Published"] ?? 0,
+      scheduled: byStatus["Scheduled"] ?? 0,
+      drafts: byStatus["Draft"] ?? 0,
+      authors: authors.sort((a, b) => a.localeCompare(b)),
+    });
+  } catch (error) {
+    console.error("PAGE STATS ERROR:", error);
+    res.status(500).json({ message: "Failed to load stats" });
   }
 };
 

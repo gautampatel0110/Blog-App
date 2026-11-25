@@ -3,6 +3,7 @@ import type { Server } from "socket.io";
 import Page from "../models/Page";
 import User from "../models/User";
 import sendMail from "../utils/sendMail";
+import { publishedEmail } from "../utils/emailTemplates";
 import { PAGE_PUBLISHED_EVENT } from "../socket/events";
 
 export async function publishDuePages(io: Server): Promise<number> {
@@ -35,11 +36,7 @@ export async function publishDuePages(io: Server): Promise<number> {
       const author = await User.findById(published.createdBy).select("email").lean();
       if (author?.email) {
         const clientUrl = (process.env.CLIENT_URL ?? "http://localhost:5173").replace(/\/$/, "");
-        await sendMail({
-          to: author.email,
-          subject: "Your blog is now live",
-          html: `<h2>${published.title}</h2><p>Your blog has been successfully published.</p><a href="${clientUrl}/blog/${encodeURIComponent(published.slug)}">View Blog</a>`,
-        });
+        await sendMail({ to: author.email, ...publishedEmail(published.title, `${clientUrl}/blog/${encodeURIComponent(published.slug)}`) });
       }
     } catch (error) {
       console.error(`Failed to finish publishing page ${page._id}:`, error);

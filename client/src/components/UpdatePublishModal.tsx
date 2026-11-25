@@ -1,4 +1,5 @@
 import { useState } from "react";
+import toast from "react-hot-toast";
 import type { PageStatus } from "../types";
 import { mountainDateTimeParts, mountainDateTimeToUtc, mountainDateToday, SCHEDULE_TIME_ZONE_LABEL } from "../utils/mountainTime";
 
@@ -26,14 +27,14 @@ export default function UpdatePublishModal({
 
   const handleReschedule = () => {
     if (!date || !time) {
-      alert("Please select both date and time");
+      toast.error("Please select both date and time");
       return;
     }
     let scheduledInstant: Date;
     try {
       scheduledInstant = mountainDateTimeToUtc(date, time);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Please enter a valid Mountain date and time");
+      toast.error(error instanceof Error ? error.message : "Please enter a valid Mountain date and time");
       return;
     }
     onReschedule(scheduledInstant.toISOString());

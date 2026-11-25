@@ -48,7 +48,12 @@ export interface PageFormValues {
 export interface PageAttachmentDraft {
   id: string;
   file: File | null;
+  /** Object URL for new images, or the stored URL for already-uploaded files. */
   preview: string | null;
+  /** Stored URL of an already-uploaded file (sent back as keepAttachments). */
+  url: string | null;
+  name: string;
+  type: string;
   uploaded: boolean;
 }
 
@@ -60,4 +65,12 @@ export interface PageListResponse {
     page: number;
     limit: number;
   };
+}
+
+export interface PageStats {
+  total: number;
+  published: number;
+  scheduled: number;
+  drafts: number;
+  authors: string[];
 }

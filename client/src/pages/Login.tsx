@@ -1,122 +1,99 @@
-import { useState, type ChangeEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import { FiEye, FiEyeOff } from "react-icons/fi";
 import api from "../services/api";
-import { isAxiosError } from "axios";
+import AuthLayout from "../components/AuthLayout";
+import PasswordInput from "../components/PasswordInput";
+import { apiErrorCode, apiErrorMessage } from "../utils/errors";
+
+interface LoginLocationState {
+  from?: string;
+  email?: string;
+}
 
 export default function Login() {
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-  });
+  const navigate = useNavigate();
+  const location = useLocation();
+  const state = (location.state ?? {}) as LoginLocationState;
 
-   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState(state.email ?? "");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-   const navigate = useNavigate();
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!email.trim() || !password) {
+      toast.error("Please enter your email and password");
+      return;
+    }
 
-   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setForm({...form, [e.target.name]: e.target.value});
+    try {
+      setSubmitting(true);
+      await api.post("/auth/login", { email: email.trim(), password });
+      toast.success("Welcome back!");
+      // Return to the page the user originally tried to open, if any.
+      const target = state.from && state.from !== "/" ? state.from : "/dashboard";
+      navigate(target, { replace: true });
+    } catch (error: unknown) {
+      if (apiErrorCode(error) === "EMAIL_NOT_VERIFIED") {
+        toast.error("Please verify your email first");
+        navigate(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+        return;
+      }
+      toast.error(apiErrorMessage(error, "Login failed"));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
-   };
-
-   const submit = async () => {
-  if (!form.email || !form.password) {
-    toast.error("Please enter email and password");
-    return;
-  }
-
-  try {
-    await api.post("/auth/login", form);
-
-    toast.success("Login successful");
-
-
-    setTimeout(() => {
-      navigate("/dashboard");
-    }, 500);
-
-  } catch (err: unknown) {
-    toast.error(
-      (isAxiosError<{ message?: string }>(err) ? err.response?.data?.message : undefined) || "Invalid Login credentials"
-    );
-  }
-};
-
-
-   return(
-        <div className="min-h-screen bg-gray-50 flex flex-col items-center py-10 px-4 mt-12">
-      {/* Logo */}
-      <div className="mb-8 flex items-center gap-2">
-        <span className="text-lg font-semibold text-gray-900">
-          Rapid Page Generator
-        </span>
-      </div>
-
-      {/* Card */}
-      <div className="w-full max-w-xl bg-white border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">
-          Login
-        </h2>
-
-
-         {/* Email */}
-        <div className="mb-4">
-          <label className="label">
-            Email<span className="text-red-500">*</span>
-          </label>
-          <input
-            className="input mt-1"
-            placeholder="email@address.com"
-            name="email"
-            onChange={handleChange}
-          />
-        </div>
-
-         {/* Password */}
-        <div className="mb-6">
-          <label className="label">
-            Password<span className="text-red-500">*</span>
-          </label>
-          <div className="relative mt-1">
-            <input
-              type={showPassword ? "text" : "password"}
-              className="input pr-10"
-              placeholder="Enter your password"
-              name="password"
-              onChange={handleChange}
-            />
-            <button
-              type="button"
-              className="absolute inset-y-0 right-3 flex items-center text-gray-400"
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <FiEyeOff /> : <FiEye />}
-            </button>
-          </div>
-        </div>
-
-                  {/* Button */}
-        <button
-          className="btn-primary w-fit px-6"
-          onClick={submit}
-        >
-          Login
-        </button>
-
-        <p className="text-sm text-gray-600 mt-4">
-          <Link to="/forgot" className="text-[#5B4CF5] font-medium">Forgot password?</Link>
-        </p>
-
-{/* Footer */}
-       <p className="text-sm text-gray-600 mt-4 ">
-        Don't have account? {""}
-        <Link to={"/signup"} className="text-[#5B4CF5] font medium">
-          create account.
+  return (
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Log in to manage and publish your pages."
+      footer={
+        <>
+          Don’t have an account?{" "}
+          <Link to="/signup" className="font-semibold text-brand-500 hover:underline">
+            Create one
           </Link>
-       </p>
-       </div>
-       </div>
-   )
+        </>
+      }
+    >
+      <form onSubmit={submit} className="space-y-5" noValidate>
+        <label className="block">
+          <span className="label">Email</span>
+          <input
+            type="email"
+            className="input mt-1"
+            placeholder="you@example.com"
+            autoComplete="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            autoFocus
+          />
+        </label>
 
-  }
+        <label className="block">
+          <span className="flex items-center justify-between">
+            <span className="label">Password</span>
+            <Link to="/forgot" className="text-xs font-medium text-brand-500 hover:underline">
+              Forgot password?
+            </Link>
+          </span>
+          <div className="mt-1">
+            <PasswordInput
+              placeholder="Your password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </div>
+        </label>
+
+        <button type="submit" disabled={submitting} className="btn-primary w-full py-2.5 disabled:opacity-60">
+          {submitting ? "Logging in…" : "Log in"}
+        </button>
+      </form>
+    </AuthLayout>
+  );
+}

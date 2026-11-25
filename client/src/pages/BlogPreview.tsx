@@ -1,151 +1,135 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { FiClock, FiDownload, FiFileText } from "react-icons/fi";
 import api from "../services/api";
 import type { BlogPage } from "../types";
+import { coverImage, displayAuthor, formatDate, initials, readingMinutes, sanitizeHtml } from "../utils/content";
 
 interface BlogPreviewProps {
   adminPreview?: boolean;
 }
 
+function fileName(url: string): string {
+  return decodeURIComponent(url.split("/").pop() ?? "file").replace(/^\d{10,}-/, "");
+}
+
 export default function BlogPreview({ adminPreview = false }: BlogPreviewProps) {
   const { slug, id } = useParams();
   const [blog, setBlog] = useState<BlogPage | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
+  const requestKey = adminPreview ? `id:${id}` : `slug:${slug}`;
 
   useEffect(() => {
+    let cancelled = false;
     api
       .get<BlogPage>(adminPreview ? `/pages/${id}` : `/public/blogs/${encodeURIComponent(slug ?? "")}`)
-      .then((res) => setBlog(res.data))
-      .catch(() => setBlog(null))
-      .finally(() => setLoading(false));
-  }, [adminPreview, id, slug]);
+      .then((response) => {
+        if (!cancelled) setBlog(response.data);
+      })
+      .catch(() => {
+        if (!cancelled) setBlog(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadedFor(requestKey);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [adminPreview, id, slug, requestKey]);
 
-  if (loading) {
+  const safeBody = useMemo(() => sanitizeHtml(blog?.body ?? ""), [blog?.body]);
+
+  useEffect(() => {
+    if (blog) document.title = blog.title;
+  }, [blog]);
+
+  if (loadedFor !== requestKey) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Loading blog...
+      <div className="mx-auto max-w-[720px] animate-pulse space-y-4 px-6 py-20">
+        <div className="h-10 w-3/4 rounded bg-gray-200" />
+        <div className="h-5 w-1/2 rounded bg-gray-100" />
+        <div className="mt-10 h-64 rounded-2xl bg-gray-100" />
       </div>
     );
   }
 
   if (!blog) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-500">
-        Blog not found
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-6xl font-bold text-gray-200">404</p>
+        <h1 className="text-xl font-semibold text-gray-900">This post isn’t available</h1>
+        <p className="text-sm text-gray-500">It may have been unpublished, moved, or never existed.</p>
       </div>
     );
   }
 
-  const heroImage = blog.attachments?.find((a) =>
-    a.type?.startsWith("image/")
-  );
-  const authorName = typeof blog.createdBy === "object" && blog.createdBy
-    ? blog.createdBy.name
-    : undefined;
+  const hero = coverImage(blog);
+  const author = displayAuthor(blog);
+  const files = (blog.attachments ?? []).filter((attachment) => attachment.url !== hero);
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden">
-      {/* Hero Image */}
-      {heroImage && (
-        <div className="w-full bg-gray-100">
-          <div className="max-w-5xl mx-auto">
-            <img
-              src={heroImage.url}
-              alt={blog.title}
-              className="w-full max-h-[460px] object-cover rounded-b-xl"
-            />
-          </div>
+    <div className="min-h-screen overflow-x-hidden bg-white">
+      {adminPreview && (
+        <div className="sticky top-0 z-10 flex items-center justify-center gap-3 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+          Preview · this page is <strong>{blog.status.toLowerCase()}</strong> and not visible to readers yet
+          <Link to={`/edit/${blog._id}`} className="font-semibold underline">Back to editor</Link>
         </div>
       )}
 
-      {/* Article */}
-      <article className="mx-auto max-w-[680px] px-6 py-12">
-        {/* Title */}
-        <h1 className="text-4xl font-bold text-gray-900 leading-tight">
-          {blog.title}
-        </h1>
+      <article className="mx-auto max-w-[720px] px-6 pb-20 pt-14 md:pt-20">
+        <header>
+          <h1 className="text-4xl font-extrabold leading-tight tracking-tight text-gray-900 md:text-5xl">{blog.title}</h1>
+          {blog.subTitle && <p className="mt-5 text-xl leading-relaxed text-gray-500">{blog.subTitle}</p>}
 
-        {/* Subtitle */}
-        {blog.subTitle && (
-          <p className="text-lg text-gray-500 mt-4 leading-relaxed">
-            {blog.subTitle}
-          </p>
-        )}
-
-        {/* Meta */}
-        <div className="flex items-center gap-2 mt-6 text-sm text-gray-500">
-          {blog.showAuthor !== false && (blog.author || authorName) && (
-            <span className="font-medium text-gray-700">
-              {blog.author || authorName}
+          <div className="mt-8 flex items-center gap-3 border-y border-gray-100 py-4 text-sm text-gray-500">
+            {blog.showAuthor !== false && (
+              <>
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-600">
+                  {initials(author)}
+                </span>
+                <span className="font-medium text-gray-800">{author}</span>
+                <span className="text-gray-300">·</span>
+              </>
+            )}
+            {blog.publishedAt && <span>{formatDate(blog.publishedAt)}</span>}
+            <span className="text-gray-300">·</span>
+            <span className="inline-flex items-center gap-1">
+              <FiClock size={13} /> {readingMinutes(blog.body)} min read
             </span>
-          )}
-          {blog.publishedAt && (
-            <>
-              <span>·</span>
-              <span>
-                {new Date(blog.publishedAt).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
-              </span>
-            </>
-          )}
-        </div>
+          </div>
+        </header>
 
-        {/* Divider */}
-        <div className="mt-10 border-t border-gray-200" />
+        {hero && <img src={hero} alt="" className="mt-10 w-full rounded-2xl object-cover shadow-sm" />}
 
-        {/* Body */}
         <div
-          className="
-           prose
-    prose-lg
-    max-w-none
-    mt-14
-    prose-p:leading-[1.8]
-    prose-p:mt-6
-    prose-headings:mt-12
-    prose-headings:mb-4
-    prose-img:rounded-xl
-    prose-img:mx-auto
-    prose-img:my-10
-          "
-          dangerouslySetInnerHTML={{ __html: blog.body }}
+          className="prose prose-lg prose-gray mt-10 max-w-none prose-headings:font-bold prose-headings:tracking-tight prose-a:text-brand-600 prose-img:mx-auto prose-img:rounded-xl"
+          dangerouslySetInnerHTML={{ __html: safeBody }}
         />
 
-        {/* Attachments */}
-        {blog.attachments?.length > 0 && (
-          <div className="mt-16 border-t pt-8">
-            <h3 className="text-lg font-semibold mb-4">
-              Attachments
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {blog.attachments.map((a, i) => (
+        {files.length > 0 && (
+          <section className="mt-16 border-t pt-8">
+            <h2 className="mb-4 text-lg font-semibold text-gray-900">Attachments</h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {files.map((attachment) => (
                 <a
-                  key={i}
-                  href={a.url}
+                  key={attachment.url}
+                  href={attachment.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition"
+                  className="flex items-center gap-3 rounded-xl border p-4 transition hover:border-brand-500 hover:bg-brand-50/40"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">
-                      Attachment {i + 1}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {a.type || "File"}
-                    </p>
-                  </div>
-
-                  <span className="text-blue-600 text-sm">
-                    View →
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+                    <FiFileText size={18} />
                   </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium text-gray-800">{fileName(attachment.url)}</span>
+                    <span className="text-xs text-gray-500">{attachment.type || "File"}</span>
+                  </span>
+                  <FiDownload className="text-gray-400" size={16} />
                 </a>
               ))}
             </div>
-          </div>
+          </section>
         )}
       </article>
     </div>
