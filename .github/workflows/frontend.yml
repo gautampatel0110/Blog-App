@@ -35,6 +35,26 @@ jobs:
         env:
           VITE_API_URL: https://blogapp-api-25292.azurewebsites.net/api
 
+      # Fails fast with a clear message if the secret is missing or is the wrong value.
+      - name: Check deployment token secret
+        if: github.event_name != 'pull_request'
+        env:
+          TOKEN: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Secret AZURE_STATIC_WEB_APPS_API_TOKEN is missing or empty."
+            exit 1
+          fi
+          if [[ "$TOKEN" == *"<publishData"* ]]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN contains the App Service publish profile. Paste the Static Web Apps deployment token instead."
+            exit 1
+          fi
+          if [[ "$TOKEN" =~ [[:space:]] ]]; then
+            echo "::error::AZURE_STATIC_WEB_APPS_API_TOKEN contains spaces or line breaks. Re-copy it without extra characters."
+            exit 1
+          fi
+          echo "Deployment token is present (${#TOKEN} characters)."
+
       # Pull requests are only checked; deploys happen on pushes to main.
       - name: Deploy to Azure Static Web Apps
         if: github.event_name != 'pull_request'

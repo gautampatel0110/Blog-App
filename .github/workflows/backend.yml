@@ -35,6 +35,25 @@ jobs:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     steps:
+      # Fails fast with a clear message if the secret is missing or is the wrong value.
+      - name: Check publish profile secret
+        env:
+          PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        run: |
+          if [ -z "$PROFILE" ]; then
+            echo "::error::Secret AZURE_WEBAPP_PUBLISH_PROFILE is missing or empty."
+            exit 1
+          fi
+          if [[ "$PROFILE" != *"<publishData"* ]]; then
+            echo "::error::AZURE_WEBAPP_PUBLISH_PROFILE is not a publish profile (it must start with <publishData>). It may contain the Static Web Apps token instead."
+            exit 1
+          fi
+          if [[ "$PROFILE" != *"blogapp-api-25292.scm.azurewebsites.net"* ]]; then
+            echo "::error::AZURE_WEBAPP_PUBLISH_PROFILE belongs to a different web app, or basic auth publishing was disabled when it was downloaded."
+            exit 1
+          fi
+          echo "Publish profile looks valid."
+
       - uses: actions/checkout@v5
 
       # Ship the source only; App Service (SCM_DO_BUILD_DURING_DEPLOYMENT=true)
