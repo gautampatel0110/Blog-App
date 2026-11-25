@@ -4,7 +4,9 @@ import cors from "cors";
 import express, { type ErrorRequestHandler } from "express";
 import helmet from "helmet";
 import { MulterError } from "multer";
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { join } from "node:path";
 import mongoose from "mongoose";
 import { Server as SocketServer } from "socket.io";
 import connectDB from "./config/db";
@@ -34,8 +36,24 @@ app.use(cors({ origin: allowedOrigins, credentials: true, methods: ["GET", "POST
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
+/** Commit hash written by CI into dist/build-info.json; lets the pipeline confirm the new code is live. */
+function readBuildCommit(): string {
+  try {
+    const info = JSON.parse(readFileSync(join(__dirname, "build-info.json"), "utf8")) as { commit?: string };
+    return info.commit ?? "local";
+  } catch {
+    return "local";
+  }
+}
+const buildCommit = readBuildCommit();
+
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", database: "connected" });
+  const connected = mongoose.connection.readyState === 1;
+  res.status(connected ? 200 : 503).json({
+    status: connected ? "ok" : "degraded",
+    database: connected ? "connected" : "disconnected",
+    commit: buildCommit,
+  });
 });
 app.use("/api/auth", authRoutes);
 app.use("/api/pages", pageRoutes);

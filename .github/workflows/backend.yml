@@ -9,6 +9,10 @@ on:
     paths: ["server/**"]
   workflow_dispatch:
 
+env:
+  APP_NAME: blogapp-api-25292
+  APP_URL: https://blogapp-api-25292.azurewebsites.net
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,10 +34,30 @@ jobs:
       - name: Type-check and build
         run: npm run build
 
+      # App Service does not build OneDeploy packages, so ship a ready-to-run app:
+      # compiled dist/, production-only node_modules and package.json.
+      - name: Create deployment package
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "{\"commit\":\"${GITHUB_SHA}\"}" > dist/build-info.json
+          npm prune --omit=dev
+          zip -qr ../server.zip dist node_modules package.json package-lock.json
+          ls -lh ../server.zip
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: server-package
+          path: server.zip
+          retention-days: 3
+
   deploy:
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
+    concurrency:
+      group: backend-deploy
+      cancel-in-progress: false
     steps:
       # Fails fast with a clear message if the secret is missing or is the wrong value.
       - name: Check publish profile secret
@@ -48,22 +72,36 @@ jobs:
             echo "::error::AZURE_WEBAPP_PUBLISH_PROFILE is not a publish profile (it must start with <publishData>). It may contain the Static Web Apps token instead."
             exit 1
           fi
-          if [[ "$PROFILE" != *"blogapp-api-25292.scm.azurewebsites.net"* ]]; then
+          if [[ "$PROFILE" != *"${APP_NAME}.scm.azurewebsites.net"* ]]; then
             echo "::error::AZURE_WEBAPP_PUBLISH_PROFILE belongs to a different web app, or basic auth publishing was disabled when it was downloaded."
             exit 1
           fi
           echo "Publish profile looks valid."
 
-      - uses: actions/checkout@v5
-
-      # Ship the source only; App Service (SCM_DO_BUILD_DURING_DEPLOYMENT=true)
-      # runs npm install + npm run build on the server, as it does today.
-      - name: Package server source
-        run: cd server && zip -r ../server.zip . -x "node_modules/*" "dist/*" ".env"
+      - uses: actions/download-artifact@v4
+        with:
+          name: server-package
 
       - name: Deploy to Azure App Service
         uses: azure/webapps-deploy@v3
         with:
-          app-name: blogapp-api-25292
+          app-name: ${{ env.APP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: server.zip
+          # Remove files from older deployments so stale code can never run.
+          clean: true
+
+      # Green only when the live server reports this exact commit.
+      - name: Verify the new version is live
+        run: |
+          for attempt in $(seq 1 30); do
+            body=$(curl -s -m 20 "$APP_URL/api/health" || true)
+            echo "Attempt $attempt: $body"
+            if [[ "$body" == *"$GITHUB_SHA"* ]]; then
+              echo "Deployed commit $GITHUB_SHA is live."
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::The server did not report commit $GITHUB_SHA within 5 minutes. Check the App Service log stream."
+          exit 1
