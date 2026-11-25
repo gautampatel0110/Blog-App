@@ -1,0 +1,50 @@
+name: Backend - Azure App Service
+
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", ".github/workflows/backend.yml"]
+  pull_request:
+    branches: [main]
+    paths: ["server/**"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check and build
+        run: npm run build
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Ship the source only; App Service (SCM_DO_BUILD_DURING_DEPLOYMENT=true)
+      # runs npm install + npm run build on the server, as it does today.
+      - name: Package server source
+        run: cd server && zip -r ../server.zip . -x "node_modules/*" "dist/*" ".env"
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: blogapp-api-25292
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: server.zip

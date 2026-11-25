@@ -12,10 +12,13 @@ function getJwtSecret(): string {
 }
 
 function tokenCookieOptions(): CookieOptions {
+  const isProduction = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    // Frontend and backend live on different domains in production (e.g. Vercel + Render),
+    // so the auth cookie must be sent cross-site, which requires SameSite=None + Secure.
+    sameSite: isProduction ? "none" : "lax",
+    secure: isProduction,
     path: "/",
   };
 }
