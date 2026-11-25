@@ -56,7 +56,7 @@ export default function Dashboard() {
                   onClick={() => navigate("/create-page")}
                   className="mt-6 inline-flex items-center gap-2 rounded-md bg-[#5B4CF5] px-5 py-2 text-sm font-medium text-white hover:bg-[#4a3de0] transition"
                 >
-                  + Add Page
+                  + Add Pages
                 </button>
               </div>
 
